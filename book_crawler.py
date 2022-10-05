@@ -7,6 +7,7 @@ import unicodedata
 from csv import DictWriter
 import os
 import requests
+import traceback
 options = webdriver.ChromeOptions()
 options.add_argument('--ignore-certificate-errors')   #主要是该条
 options.add_argument('--ignore-ssl-errors')
@@ -14,20 +15,7 @@ chromeOptions = webdriver.ChromeOptions()
 class DoubanParser:
     driver = webdriver.Chrome()
     records = []
-    '''def header_x():
-    # 随机获取一个headers
-        user_agents = ['Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36',
-                      'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:34.0) Gecko/20100101 Firefox/34.0',
-                      'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/534.57.2 (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2',
-                      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36',
-                      'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.1 (KHTML, like Gecko) Chrome/21.0.1180.71 Safari/537.1 LBBROWSER',
-                      'Mozilla/5.0 (Windows NT 5.1) AppleWebKit/535.11 (KHTML, like Gecko) Chrome/17.0.963.84 Safari/535.11 SE 2.X MetaSr 1.0'
-                      ]
-
-        headers = {
-        "User-Agent": random.choice(user_agents)
-        }
-        return headers'''
+    records_error = []
     def get_proxy(Any):
         return requests.get("http://127.0.0.1:5010/get/").json()
 
@@ -36,7 +24,7 @@ class DoubanParser:
 
 # your spider code
 
-    def getHtml(self,url):##https://proxy-pool.readthedocs.io/zh/latest/
+    def getHtml(self,url):
     # ....
         retry_count = 5
         proxy = self.get_proxy().get("proxy")
@@ -55,48 +43,57 @@ class DoubanParser:
         return None
 
     def parse(self,page_url): 
-        #headers = self.header_x()
-        #self.driver.get(page_url,headers=headers)
-        #html = self.driver.page_source
         try:
             html = self.getHtml(page_url)
             while(html == None):
                 html = self.getHtml(page_url)
             page_soup = BeautifulSoup(html,features='lxml')
-            movie_titles = page_soup.find('div',{'id':'content'})
-            title = movie_titles.h1.select('span')[0].string##title : content > h1 > span:nth-child(1)
-            year = movie_titles.h1.select('span')[1].string#
-            year = year.replace('(','')
-            year = year.replace(')','')
-            movie_summary = page_soup.find('div',{'id':'link-report'})
-            summary = movie_summary.span.get_text()#link-report > span.all.hidden > div > div > p
+            movie_titles = page_soup.find('div',{'id':'wrapper'})
+            title = movie_titles.h1.span.string##title : #wrapper > h1 > span
+            
+            book_rating = page_soup.find('div',{'class':'rating_self clearfix'})##interest_sectl > div > div.rating_self.clearfix > strong
+            rating =  book_rating.strong.get_text();
+            
+            author = page_soup.find('div',{'id':'info'}).select('span')[0].a##info > span:nth-child(1) > a
+            
+            book_summary = page_soup.find('div',{'id':'link-report'})
+            summary = book_summary.find('span',{'class':'all hidden'}).div.div.p.get_text()#link-report > span.all.hidden > div > div > p
             #summary = ''.join(summary.split())##剔除空格与换行符
             summary = summary.replace("\u3000",'')
             summary = summary.replace(' ','')
             summary = summary.replace('\n','')
             author_summary= page_soup.find('div',{'class':'related_info'}).select('div')[5].div.div.p.string#content > div > div.article > div.related_info > div:nth-child(5) > div > div > p
-            movie_dict = {'movie':title,'year':year,'link':page_url,'book summary':summary,'author summary':author_summary}
+            movie_dict = {'book':title,'rating':rating,'link':page_url,'book summary':summary,'author summary':author_summary}
+            self.records.append(movie_dict)
         except:
-            print("page:"+page_url+"doesn't exist")
+            movie_dict = {'book':"ERROR",'rating':"ERROR",'link':page_url,'book summary':traceback.format_exc(),'author summary':"ERROR"}
+            self.records_error.append(movie_dict)
     def read_txt(self):
         num = 1
-        f = open("Movie_id.txt")
+        f = open("D:/360MoveData/Users/admin/Desktop/coursework/web_info/lab/lab1/Book_id.txt")
         byt = f.readlines()
         for line in byt:
-            url = "https://movie.douban.com/subject/"+line
+            url = "https://book.douban.com/subject/"+line
             self.parse(url)
             print(num,"has been resolved")
             num =num + 1
-        '''url = "https://book.douban.com/subject/1046265//";'''
-        self.parse(url)
-        if os.path.exists("douban_top_250.csv"):
-            os.remove("douban_top_250.csv")
-        with open('douban_top_250.csv','w', newline='', encoding='utf-8-sig') as file:
+        '''url = "https://book.douban.com/subject/1046265"
+        self.parse(url)'''
+        if os.path.exists("douban_book.csv"):
+            os.remove("douban_book.csv")
+        with open('douban_book.csv','w', newline='', encoding='utf-8-sig') as file:
             headers = [key for key in self.records[0].keys()]
             csv_writer = DictWriter(file, fieldnames=headers)
             csv_writer.writeheader()
             for record in self.records:
                 csv_writer.writerow(record)
+        if self.records_error != []:
+            with open('douban_book_ERROR.csv','w', newline='', encoding='utf-8-sig') as file:
+                headers = [key for key in self.records_error[0].keys()]
+                csv_writer = DictWriter(file, fieldnames=headers)
+                csv_writer.writeheader()
+                for record in self.records_error:
+                    csv_writer.writerow(record)
     
 parser=DoubanParser()
 parser.read_txt()
