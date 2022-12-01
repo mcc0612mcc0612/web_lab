@@ -7,6 +7,7 @@ import unicodedata
 from csv import DictWriter
 import os
 import requests
+import traceback
 options = webdriver.ChromeOptions()
 options.add_argument('--ignore-certificate-errors')   #主要是该条
 options.add_argument('--ignore-ssl-errors')
@@ -14,6 +15,7 @@ chromeOptions = webdriver.ChromeOptions()
 class DoubanParser:
     driver = webdriver.Chrome()
     records = []
+    records_error = []
     '''def header_x():
     # 随机获取一个headers
         user_agents = ['Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36',
@@ -36,7 +38,7 @@ class DoubanParser:
 
 # your spider code
 
-    def getHtml(self,url):##https://proxy-pool.readthedocs.io/zh/latest/
+    def getHtml(self,url):
     # ....
         retry_count = 5
         proxy = self.get_proxy().get("proxy")
@@ -68,35 +70,54 @@ class DoubanParser:
             year = movie_titles.h1.select('span')[1].string#
             year = year.replace('(','')
             year = year.replace(')','')
-            movie_summary = page_soup.find('div',{'id':'link-report'})
-            summary = movie_summary.span.get_text()#link-report > span.all.hidden > div > div > p
-            #summary = ''.join(summary.split())##剔除空格与换行符
-            summary = summary.replace("\u3000",'')
-            summary = summary.replace(' ','')
-            summary = summary.replace('\n','')
-            author_summary= page_soup.find('div',{'class':'related_info'}).select('div')[5].div.div.p.string#content > div > div.article > div.related_info > div:nth-child(5) > div > div > p
-            movie_dict = {'movie':title,'year':year,'link':page_url,'book summary':summary,'author summary':author_summary}
+            movie_summary = page_soup.find('div',{'id':'link-report-intra'})#link-report-intra > span.all.hidden
+            summary = movie_summary.span.get_text()##summary:#link-report > span
+            summary = ''.join(summary.split())##剔除空格与换行符
+            #info > span:nth-child(8)
+            genre = ""
+            for p in page_soup.find('div',{'id':'info'}).find_all('span',{'property':'v:genre'}):
+                genre += p.get_text()#info > span:nth-child(8)
+            movie_dict = {'movie':title,'genre':genre,'year':year,'link':page_url,'summary':summary}
+            movie_cast = page_soup.find_all('li',class_='celebrity')#celebrities > ul > li:nth-child(1)
+            num_of_cel = 0
+            for celebrity in movie_cast:##celebrities > ul > li:nth-child(1) > div > span.role
+                num_of_cel = num_of_cel + 1
+                movie_dict['celebrity'+str(num_of_cel)] = celebrity.find('span',class_='name').get_text()+' '+celebrity.find('span',class_='role').get_text()
+            self.records.append(movie_dict)
         except:
-            print("page:"+page_url+"doesn't exist")
+            print(traceback.format_exc())
+            movie_dict = {'movie':"ERROR",'rating':"ERROR",'link':page_url,'book summary':traceback.format_exc(),'author summary':"ERROR"}
+            self.records_error.append(movie_dict)
     def read_txt(self):
         num = 1
-        f = open("Movie_id.txt")
+        f = open("stage1/Movie_id.txt")
         byt = f.readlines()
         for line in byt:
             url = "https://movie.douban.com/subject/"+line
             self.parse(url)
             print(num,"has been resolved")
             num =num + 1
-        '''url = "https://book.douban.com/subject/1046265//";'''
-        self.parse(url)
-        if os.path.exists("douban_top_250.csv"):
-            os.remove("douban_top_250.csv")
-        with open('douban_top_250.csv','w', newline='', encoding='utf-8-sig') as file:
+        '''url = "https://movie.douban.com/subject/1309046/";
+        self.parse(url)'''
+        '''url = "https://movie.douban.com/subject/1418192/";
+        self.parse(url)'''
+        if os.path.exists("douban_movie.csv"):
+            os.remove("douban_movie.csv")
+        if os.path.exists("douban_movie_ERROR.csv"):
+            os.remove("douban_movie_ERROR.csv")
+        with open('douban_movie.csv','w', newline='', encoding='utf-8-sig') as file:
             headers = [key for key in self.records[0].keys()]
             csv_writer = DictWriter(file, fieldnames=headers)
             csv_writer.writeheader()
             for record in self.records:
                 csv_writer.writerow(record)
+        if self.records_error != []:
+            with open('douban_movie_ERROR.csv','w', newline='', encoding='utf-8-sig') as file:
+                headers = [key for key in self.records_error[0].keys()]
+                csv_writer = DictWriter(file, fieldnames=headers)
+                csv_writer.writeheader()
+                for record in self.records_error:
+                    csv_writer.writerow(record)
     
 parser=DoubanParser()
 parser.read_txt()

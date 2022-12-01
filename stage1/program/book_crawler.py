@@ -1,4 +1,6 @@
 #coding=utf-8
+from ast import IsNot
+from types import NoneType
 from bs4 import BeautifulSoup
 from selenium import webdriver
 import time
@@ -55,19 +57,42 @@ class DoubanParser:
             rating =  book_rating.strong.get_text();
             
             author = page_soup.find('div',{'id':'info'}).select('span')[0].a##info > span:nth-child(1) > a
-            
             book_summary = page_soup.find('div',{'id':'link-report'})
-            summary = book_summary.find('span',{'class':'all hidden'}).div.div.p.get_text()#link-report > span.all.hidden > div > div > p
+            summary = ""
+            if book_summary.find('span',{'class':'all hidden'}) is not None:
+                for string in book_summary.find('span',{'class':'all hidden'}).stripped_strings:
+                    summary += string #link-report > span.all.hidden > div > div > p
+            elif book_summary.find('span',{'class':'short'}) is not None:
+                 #link-report > span.short > div > p:nth-child(1)
+                for string in book_summary.find('span',{'class':'short'}).stripped_strings:
+                    summary += string;
+            else:
+                #link-report > div > div > p
+                for string in book_summary.stripped_strings:
+                    summary += string
+            #link-report > div > div > p:nth-child(1)
             #summary = ''.join(summary.split())##剔除空格与换行符
-            summary = summary.replace("\u3000",'')
-            summary = summary.replace(' ','')
-            summary = summary.replace('\n','')
-            author_summary= page_soup.find('div',{'class':'related_info'}).select('div')[5].div.div.p.string#content > div > div.article > div.related_info > div:nth-child(5) > div > div > p
-            movie_dict = {'book':title,'rating':rating,'link':page_url,'book summary':summary,'author summary':author_summary}
+            #summary = summary.replace([' ','\n','\u3000'],'')
+            author_summary=""
+            preauthor = page_soup.find('div',{'class':'related_info'})
+            q = preauthor.select('div')[4]
+            if preauthor.select('div')[4].find('span',{'class':'all hidden'}) is not None:
+                for string in preauthor.select('div')[4].find('span',{'class':'all hidden'}).stripped_strings:
+                    author_summary += string#content > div > div.article > div.related_info > div:nth-child(5) > span.all.hidden > div > p
+            elif preauthor.select('div')[4].find('span',{'class':'short'}) is not None:
+                #content > div > div.article > div.related_info > div:nth-child(5) > span.short > div > p
+                for string in  preauthor.select('div')[4].find('span',{'class':'short'}).stripped_strings:
+                    author_summary += string
+            else:
+                #content > div > div.article > div.related_info > div:nth-child(5) > div > div > p:nth-child(1)
+                for string in preauthor.select('div')[4].stripped_strings:
+                    author_summary += string
+            movie_dict = {'book':title,'rating':rating,'link':page_url,'book summary':summary,'author summary':author_summary}##content > div > div.article > div.related_info > div:nth-child(5) > div > div > p
             self.records.append(movie_dict)
         except:
-            movie_dict = {'book':"ERROR",'rating':"ERROR",'link':page_url,'book summary':traceback.format_exc(),'author summary':"ERROR"}
-            self.records_error.append(movie_dict)
+            print(traceback.format_exc())
+            #movie_dict = {'book':"ERROR",'rating':"ERROR",'link':page_url,'book summary':traceback.format_exc(),'author summary':"ERROR"}
+            #self.records_error.append(movie_dict)
     def read_txt(self):
         num = 1
         f = open("D:/360MoveData/Users/admin/Desktop/coursework/web_info/lab/lab1/Book_id.txt")
@@ -77,8 +102,8 @@ class DoubanParser:
             self.parse(url)
             print(num,"has been resolved")
             num =num + 1
-        '''url = "https://book.douban.com/subject/1046265"
-        self.parse(url)'''
+        '''url = "https://book.douban.com/subject/1400707"'''
+        self.parse(url)
         if os.path.exists("douban_book.csv"):
             os.remove("douban_book.csv")
         with open('douban_book.csv','w', newline='', encoding='utf-8-sig') as file:
